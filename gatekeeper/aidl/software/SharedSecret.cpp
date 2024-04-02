@@ -23,6 +23,7 @@
 
 #include <openssl/rand.h>
 
+#include <KeyMintUtils.h>
 #include <aidl/android/hardware/security/sharedsecret/BnSharedSecret.h>
 #include <aidl/android/hardware/security/sharedsecret/SharedSecretParameters.h>
 #include <android-base/logging.h>
