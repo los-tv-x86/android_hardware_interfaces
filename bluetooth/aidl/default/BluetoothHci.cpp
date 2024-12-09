@@ -143,6 +143,22 @@ void BluetoothHci::reset() {
   resetPromise.reset();
 }
 
+void BluetoothHci::sendNOCPHciEvent(const std::vector<uint8_t>& packet) {
+  //send NOCP for every ACL packet received on loopback mode
+  if (packet.size() > 2) {
+    std::vector<uint8_t> nocp_packet (7);
+    nocp_packet[0] = 0x13;             //HCI NOCP opcode
+    nocp_packet[1] = 0x05;             //Length
+    nocp_packet[2] = 0x01;             //No of handles
+    nocp_packet[3] = packet[0];        //acl handle (2b)
+    nocp_packet[4] = packet[1] & 0x0F;
+    nocp_packet[5] = 0x01;             //No of cmpl pkts (2b)
+    nocp_packet[6] = 0x00;
+
+    mCb->hciEventReceived(nocp_packet);
+  }
+}
+
 void BluetoothHci::initialize(
     const std::shared_ptr<hal::IBluetoothHciCallbacks>& cb) {
   ALOGI(__func__);
@@ -168,6 +184,7 @@ void BluetoothHci::initialize(
     cb->initializationComplete(Status::ALREADY_INITIALIZED);
   }
 
+  isLocalLoopbackActive = false;
   mCb = cb;
   management_.reset(new NetBluetoothMgmt);
   mFd = management_->openHci();
@@ -203,6 +220,8 @@ void BluetoothHci::initialize(
       },
       [this](const std::vector<uint8_t>& raw_acl) {
         mCb->aclDataReceived(raw_acl);
+        if (isLocalLoopbackActive)
+          sendNOCPHciEvent(raw_acl);
       },
       [this](const std::vector<uint8_t>& raw_sco) {
         mCb->scoDataReceived(raw_sco);
@@ -230,6 +249,7 @@ void BluetoothHci::initialize(
 
 void BluetoothHci::close() {
   ALOGI(__func__);
+  isLocalLoopbackActive = false;
   {
     std::lock_guard<std::mutex> guard(mStateMutex);
     if (mState != HalState::ONE_CLIENT) {
@@ -260,7 +280,21 @@ void BluetoothHci::clientDied() {
   close();
 }
 
+void BluetoothHci::checkLocalLoopbackCmd(const std::vector<uint8_t>& packet) {
+  if (packet.size() > 3 &&
+        (((uint16_t)packet[1] << 8) | packet[0])
+	                 == HCI_WRITE_LOCAL_LOOPBACK_OPCODE) {
+    ALOGI("LocalLoopbackCmd");
+    if (packet[3] == 0x01) {
+      isLocalLoopbackActive = true;
+    } else {
+      isLocalLoopbackActive = false;
+    }
+  }
+}
+
 void BluetoothHci::sendHciCommand(const std::vector<uint8_t>& packet) {
+  checkLocalLoopbackCmd(packet);
   return send(PacketType::COMMAND, packet);
 }
 

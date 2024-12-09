@@ -51,6 +51,10 @@ class BluetoothHci : public hal::IBluetoothHci {
 
   static BluetoothHci* get();
 
+  void sendNOCPHciEvent(const std::vector<uint8_t>& packet);
+
+  void checkLocalLoopbackCmd(const std::vector<uint8_t>& packet);
+
  private:
   int mFd{-1};
   std::shared_ptr<hal::IBluetoothHciCallbacks> mCb = nullptr;
@@ -77,6 +81,7 @@ class BluetoothHci : public hal::IBluetoothHci {
     ONE_CLIENT,
     CLOSING,
   } mState{HalState::READY};
+  bool isLocalLoopbackActive;
 };
 
 }  // namespace aidl::android::hardware::bluetooth::impl
